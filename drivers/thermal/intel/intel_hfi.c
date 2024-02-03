@@ -97,12 +97,25 @@ struct hfi_hdr {
 } __packed;
 
 /**
- * struct hfi_instance - Representation of an HFI instance (i.e., a table)
- * @local_table:	Base of the local copy of the HFI table
+ * struct hfi_table - Representation of an HFI table
+ * @base_addr:		Base address of the local copy of the HFI table
  * @timestamp:		Timestamp of the last update of the local table.
  *			Located at the base of the local table.
  * @hdr:		Base address of the header of the local table
  * @data:		Base address of the data of the local table
+ */
+struct hfi_table {
+	union {
+		void			*base_addr;
+		u64			*timestamp;
+	};
+	void			*hdr;
+	void			*data;
+};
+
+/**
+ * struct hfi_instance - Representation of an HFI instance (i.e., a table)
+ * @local_table:	Local copy of HFI table for this instance
  * @cpus:		CPUs represented in this HFI table instance
  * @hw_table:		Pointer to the HFI table of this instance
  * @update_work:	Delayed work to process HFI updates
@@ -112,12 +125,7 @@ struct hfi_hdr {
  * A set of parameters to parse and navigate a specific HFI table.
  */
 struct hfi_instance {
-	union {
-		void			*local_table;
-		u64			*timestamp;
-	};
-	void			*hdr;
-	void			*data;
+	struct hfi_table	local_table;
 	cpumask_var_t		cpus;
 	void			*hw_table;
 	struct delayed_work	update_work;
@@ -175,7 +183,7 @@ static void get_hfi_caps(struct hfi_instance *hfi_instance,
 		s16 index;
 
 		index = per_cpu(hfi_cpu_info, cpu).index;
-		caps = hfi_instance->data + index * hfi_features.cpu_stride;
+		caps = hfi_instance->local_table.data + index * hfi_features.cpu_stride;
 		cpu_caps[i].cpu = cpu;
 
 		/*
@@ -292,7 +300,7 @@ void intel_hfi_process_event(__u64 pkg_therm_status_msr_val)
 	 * where a lagging CPU entered the locked region.
 	 */
 	new_timestamp = *(u64 *)hfi_instance->hw_table;
-	if (*hfi_instance->timestamp == new_timestamp) {
+	if (*hfi_instance->local_table.timestamp == new_timestamp) {
 		thermal_clear_package_intr_status(PACKAGE_LEVEL, PACKAGE_THERM_STATUS_HFI_UPDATED);
 		raw_spin_unlock(&hfi_instance->event_lock);
 		return;
@@ -304,7 +312,7 @@ void intel_hfi_process_event(__u64 pkg_therm_status_msr_val)
 	 * Copy the updated table into our local copy. This includes the new
 	 * timestamp.
 	 */
-	memcpy(hfi_instance->local_table, hfi_instance->hw_table,
+	memcpy(hfi_instance->local_table.base_addr, hfi_instance->hw_table,
 	       hfi_features.nr_table_pages << PAGE_SHIFT);
 
 	/*
@@ -339,11 +347,12 @@ static void init_hfi_cpu_index(struct hfi_cpu_info *info)
 static void init_hfi_instance(struct hfi_instance *hfi_instance)
 {
 	/* The HFI header is below the time-stamp. */
-	hfi_instance->hdr = hfi_instance->local_table +
-			    sizeof(*hfi_instance->timestamp);
+	hfi_instance->local_table.hdr = hfi_instance->local_table.base_addr +
+					sizeof(*hfi_instance->local_table.timestamp);
 
 	/* The HFI data starts below the header. */
-	hfi_instance->data = hfi_instance->hdr + hfi_features.hdr_size;
+	hfi_instance->local_table.data = hfi_instance->local_table.hdr +
+					 hfi_features.hdr_size;
 }
 
 /* Caller must hold hfi_instance_lock. */
@@ -439,7 +448,7 @@ void intel_hfi_online(unsigned int cpu)
 	 * if needed.
 	 */
 	mutex_lock(&hfi_instance_lock);
-	if (hfi_instance->hdr)
+	if (hfi_instance->local_table.hdr)
 		goto enable;
 
 	/*
@@ -459,9 +468,9 @@ void intel_hfi_online(unsigned int cpu)
 	 * Allocate memory to keep a local copy of the table that
 	 * hardware generates.
 	 */
-	hfi_instance->local_table = kzalloc(hfi_features.nr_table_pages << PAGE_SHIFT,
-					    GFP_KERNEL);
-	if (!hfi_instance->local_table)
+	hfi_instance->local_table.base_addr = kzalloc(hfi_features.nr_table_pages << PAGE_SHIFT,
+						      GFP_KERNEL);
+	if (!hfi_instance->local_table.base_addr)
 		goto free_hw_table;
 
 	init_hfi_instance(hfi_instance);
@@ -512,7 +521,7 @@ void intel_hfi_offline(unsigned int cpu)
 	if (!hfi_instance)
 		return;
 
-	if (!hfi_instance->hdr)
+	if (!hfi_instance->local_table.hdr)
 		return;
 
 	mutex_lock(&hfi_instance_lock);
