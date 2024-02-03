@@ -41,6 +41,7 @@
 #include <linux/topology.h>
 #include <linux/workqueue.h>
 
+#include <asm/hfi.h>
 #include <asm/msr.h>
 
 #include "intel_hfi.h"
@@ -48,28 +49,7 @@
 
 #include "../thermal_netlink.h"
 
-/* CPUID detection and enumeration definitions for HFI */
-
 #define CPUID_HFI_LEAF 6
-
-union hfi_capabilities {
-	struct {
-		u8	performance:1;
-		u8	energy_efficiency:1;
-		u8	__reserved:6;
-	} split;
-	u8 bits;
-};
-
-union cpuid6_edx {
-	struct {
-		union hfi_capabilities	capabilities;
-		u32			table_pages:4;
-		u32			__reserved:4;
-		s32			index:16;
-	} split;
-	u32 full;
-};
 
 /**
  * struct hfi_cpu_data - HFI capabilities per CPU
@@ -83,35 +63,6 @@ struct hfi_cpu_data {
 	u8	perf_cap;
 	u8	ee_cap;
 } __packed;
-
-/**
- * struct hfi_hdr - Header of the HFI table
- * @perf_updated:	Hardware updated performance capabilities
- * @ee_updated:		Hardware updated energy efficiency capabilities
- *
- * Properties of the data in an HFI table.
- */
-struct hfi_hdr {
-	u8	perf_updated;
-	u8	ee_updated;
-} __packed;
-
-/**
- * struct hfi_table - Representation of an HFI table
- * @base_addr:		Base address of the local copy of the HFI table
- * @timestamp:		Timestamp of the last update of the local table.
- *			Located at the base of the local table.
- * @hdr:		Base address of the header of the local table
- * @data:		Base address of the data of the local table
- */
-struct hfi_table {
-	union {
-		void			*base_addr;
-		u64			*timestamp;
-	};
-	void			*hdr;
-	void			*data;
-};
 
 /**
  * struct hfi_instance - Representation of an HFI instance (i.e., a table)
@@ -131,21 +82,6 @@ struct hfi_instance {
 	struct delayed_work	update_work;
 	raw_spinlock_t		table_lock;
 	raw_spinlock_t		event_lock;
-};
-
-/**
- * struct hfi_features - Supported HFI features
- * @nr_table_pages:	Size of the HFI table in 4KB pages
- * @cpu_stride:		Stride size to locate the capability data of a logical
- *			processor within the table (i.e., row stride)
- * @hdr_size:		Size of the table header
- *
- * Parameters and supported features that are common to all HFI instances
- */
-struct hfi_features {
-	size_t		nr_table_pages;
-	unsigned int	cpu_stride;
-	unsigned int	hdr_size;
 };
 
 /**
