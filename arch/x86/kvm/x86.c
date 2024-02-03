@@ -1552,6 +1552,7 @@ static const u32 emulated_msrs_all[] = {
 	MSR_IA32_PACKAGE_THERM_STATUS,
 	MSR_IA32_HW_FEEDBACK_CONFIG,
 	MSR_IA32_HW_FEEDBACK_PTR,
+	MSR_IA32_HW_HRESET_ENABLE,
 
 	/*
 	 * KVM always supports the "true" VMX control MSRs, even if the host
