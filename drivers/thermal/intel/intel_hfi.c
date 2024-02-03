@@ -33,6 +33,7 @@
 #include <linux/percpu-defs.h>
 #include <linux/printk.h>
 #include <linux/processor.h>
+#include <linux/sched/topology.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/suspend.h>
@@ -298,6 +299,10 @@ static void hfi_enable(void)
 
 	rdmsrl(MSR_IA32_HW_FEEDBACK_CONFIG, msr_val);
 	msr_val |= HW_FEEDBACK_CONFIG_HFI_ENABLE;
+
+	if (cpu_feature_enabled(X86_FEATURE_ITD))
+		msr_val |= HW_FEEDBACK_CONFIG_ITD_ENABLE;
+
 	wrmsrl(MSR_IA32_HW_FEEDBACK_CONFIG, msr_val);
 }
 
@@ -319,6 +324,10 @@ static void hfi_disable(void)
 
 	rdmsrl(MSR_IA32_HW_FEEDBACK_CONFIG, msr_val);
 	msr_val &= ~HW_FEEDBACK_CONFIG_HFI_ENABLE;
+
+	if (cpu_feature_enabled(X86_FEATURE_ITD))
+		msr_val &= ~HW_FEEDBACK_CONFIG_ITD_ENABLE;
+
 	wrmsrl(MSR_IA32_HW_FEEDBACK_CONFIG, msr_val);
 
 	/*
@@ -335,6 +344,30 @@ static void hfi_disable(void)
 		udelay(1);
 		cpu_relax();
 	}
+}
+
+static void hfi_enable_itd_classification(void)
+{
+	u64 msr_val;
+
+	if (!cpu_feature_enabled(X86_FEATURE_ITD))
+		return;
+
+	rdmsrl(MSR_IA32_HW_FEEDBACK_THREAD_CONFIG, msr_val);
+	msr_val |= HW_FEEDBACK_THREAD_CONFIG_ENABLE;
+	wrmsrl(MSR_IA32_HW_FEEDBACK_THREAD_CONFIG, msr_val);
+}
+
+static void hfi_disable_itd_classification(void)
+{
+	u64 msr_val;
+
+	if (!cpu_feature_enabled(X86_FEATURE_ITD))
+		return;
+
+	rdmsrl(MSR_IA32_HW_FEEDBACK_THREAD_CONFIG, msr_val);
+	msr_val &= ~HW_FEEDBACK_THREAD_CONFIG_ENABLE;
+	wrmsrl(MSR_IA32_HW_FEEDBACK_THREAD_CONFIG, msr_val);
 }
 
 /**
@@ -376,6 +409,8 @@ void intel_hfi_online(unsigned int cpu)
 	}
 
 	init_hfi_cpu_index(info);
+
+	hfi_enable_itd_classification();
 
 	/*
 	 * Now check if the HFI instance of the package/die of @cpu has been
@@ -460,6 +495,8 @@ void intel_hfi_offline(unsigned int cpu)
 	if (!hfi_instance->local_table.hdr)
 		return;
 
+	hfi_disable_itd_classification();
+
 	mutex_lock(&hfi_instance_lock);
 	cpumask_clear_cpu(cpu, hfi_instance->cpus);
 
@@ -505,8 +542,14 @@ static __init int hfi_parse_features(void)
 	 */
 	hfi_features.class_stride = nr_capabilities;
 
-	/* For now, use only one class of the HFI table */
-	hfi_features.nr_classes = 1;
+	if (cpu_feature_enabled(X86_FEATURE_ITD)) {
+		union cpuid6_ecx ecx;
+
+		ecx.full = cpuid_ecx(CPUID_HFI_LEAF);
+		hfi_features.nr_classes = ecx.split.nr_classes;
+	} else {
+		hfi_features.nr_classes = 1;
+	}
 
 	/*
 	 * The header contains change indications for each supported feature.
@@ -535,11 +578,16 @@ static void hfi_do_enable(void)
 	/* No locking needed. There is no concurrency with CPU online. */
 	hfi_set_hw_table(hfi_instance);
 	hfi_enable();
+
+	hfi_enable_itd_classification();
 }
 
 static int hfi_do_disable(void)
 {
 	/* No locking needed. There is no concurrency with CPU offline. */
+
+	hfi_disable_itd_classification();
+
 	hfi_disable();
 
 	return 0;

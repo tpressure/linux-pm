@@ -23,6 +23,15 @@ union cpuid6_edx {
 	u32 full;
 };
 
+union cpuid6_ecx {
+	struct {
+		u32	dont_care0:8;
+		u32	nr_classes:8;
+		u32	dont_care1:16;
+	} split;
+	u32 full;
+};
+
 /**
  * struct hfi_hdr - Header of the HFI table
  * @perf_updated:	Hardware updated performance capabilities
