@@ -1143,7 +1143,11 @@
 
 /* Hardware Feedback Interface */
 #define MSR_IA32_HW_FEEDBACK_PTR        0x17d0
+#define HW_FEEDBACK_PTR_VALID           BIT_ULL(0)
+#define HW_FEEDBACK_PTR_RESERVED_MASK   GENMASK_ULL(11, 1)
+
 #define MSR_IA32_HW_FEEDBACK_CONFIG     0x17d1
+#define HW_FEEDBACK_CONFIG_HFI_ENABLE   BIT_ULL(0)
 
 /* x2APIC locked status */
 #define MSR_IA32_XAPIC_DISABLE_STATUS	0xBD
