@@ -395,6 +395,11 @@ struct vcpu_vmx {
  *			the vCPU is running on.
  *			When KVM updates the Guest's HFI table, it writes the local
  *			virtual HFI table to the Guest HFI table memory in @table_base.
+ * @has_hfi_instance:	Flag indicates if VM registers @hfi_nb on Host's HFI instance.
+ * @hfi_nb:		Notifier block to be registered in Host HFI instance.
+ * @vmx:		Points to the kvm_vmx where the current nb is located.
+ *			Used to get the corresponding kvm_vmx of the nb when it
+ *			is executed.
  *
  * A set of status flags and feature information, used to maintain local virtual HFI table
  * and sync updates to Guest HFI table.
@@ -409,6 +414,9 @@ struct hfi_desc {
 	gpa_t			table_base;
 	struct			hfi_features hfi_features;
 	struct hfi_table	hfi_table;
+	bool			has_hfi_instance;
+	struct notifier_block	hfi_nb;
+	struct kvm_vmx		*vmx;
 };
 
 struct pkg_therm_desc {
