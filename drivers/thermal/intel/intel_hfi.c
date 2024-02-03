@@ -72,18 +72,20 @@ struct hfi_cpu_data {
  * @cpus:		CPUs represented in this HFI table instance
  * @hw_table:		Pointer to the HFI table of this instance
  * @update_work:	Delayed work to process HFI updates
+ * @notifier_chain:	Notification chain dedicated to this instance
  * @table_lock:		Lock to protect acceses to the table of this instance
  * @event_lock:		Lock to process HFI interrupts
  *
  * A set of parameters to parse and navigate a specific HFI table.
  */
 struct hfi_instance {
-	struct hfi_table	local_table;
-	cpumask_var_t		cpus;
-	void			*hw_table;
-	struct delayed_work	update_work;
-	raw_spinlock_t		table_lock;
-	raw_spinlock_t		event_lock;
+	struct hfi_table		local_table;
+	cpumask_var_t			cpus;
+	void				*hw_table;
+	struct delayed_work		update_work;
+	struct raw_notifier_head	notifier_chain;
+	raw_spinlock_t			table_lock;
+	raw_spinlock_t			event_lock;
 };
 
 /**
@@ -189,6 +191,7 @@ static void hfi_update_work_fn(struct work_struct *work)
 				    update_work);
 
 	update_capabilities(hfi_instance);
+	raw_notifier_call_chain(&hfi_instance->notifier_chain, 0, NULL);
 }
 
 void intel_hfi_process_event(__u64 pkg_therm_status_msr_val)
@@ -448,6 +451,7 @@ void intel_hfi_online(unsigned int cpu)
 	init_hfi_instance(hfi_instance);
 
 	INIT_DELAYED_WORK(&hfi_instance->update_work, hfi_update_work_fn);
+	RAW_INIT_NOTIFIER_HEAD(&hfi_instance->notifier_chain);
 	raw_spin_lock_init(&hfi_instance->table_lock);
 	raw_spin_lock_init(&hfi_instance->event_lock);
 
@@ -791,3 +795,50 @@ int intel_hfi_build_virt_table(struct hfi_table *table,
 	return table_changed;
 }
 EXPORT_SYMBOL_GPL(intel_hfi_build_virt_table);
+
+/**
+ * intel_hfi_notifier_register() - Register @notifier hook at @hfi_instance.
+ *
+ * @notifier:		HFI notifier hook to be registered
+ * @cpu:		CPU whose HFI instance the notifier is register at
+ *
+ * When the HFI instance of @cpu receives HFI interrupt and updates its local
+ * HFI table, the registered HFI notifier will be called.
+ *
+ * Return: 0 if successful, otherwise error.
+ */
+int intel_hfi_notifier_register(struct notifier_block *notifier,
+				unsigned int cpu)
+{
+	struct hfi_instance *hfi_instance;
+
+	if (!notifier || cpu >= nr_cpu_ids)
+		return -EINVAL;
+
+	hfi_instance = per_cpu(hfi_cpu_info, cpu).hfi_instance;
+	return raw_notifier_chain_register(&hfi_instance->notifier_chain,
+					   notifier);
+}
+EXPORT_SYMBOL_GPL(intel_hfi_notifier_register);
+
+/**
+ * intel_hfi_notifier_unregister() - Unregister @notifier hook at @hfi_instance
+ *
+ * @notifier:		HFI notifier hook to be unregistered
+ * @cpu:		CPU whose HFI instance the notifier is unregister from
+ *
+ * Return: 0 if successful, otherwise error.
+ */
+int intel_hfi_notifier_unregister(struct notifier_block *notifier,
+				  unsigned int cpu)
+{
+	struct hfi_instance *hfi_instance;
+
+	if (!notifier || cpu >= nr_cpu_ids)
+		return -EINVAL;
+
+	hfi_instance = per_cpu(hfi_cpu_info, cpu).hfi_instance;
+	return raw_notifier_chain_unregister(&hfi_instance->notifier_chain,
+					     notifier);
+}
+EXPORT_SYMBOL_GPL(intel_hfi_notifier_unregister);

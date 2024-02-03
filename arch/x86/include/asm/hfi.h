@@ -90,6 +90,10 @@ int intel_hfi_build_virt_table(struct hfi_table *table, struct hfi_features *fea
 			       unsigned int nr_classes, unsigned int hfi_index,
 			       unsigned int cpu);
 static inline bool intel_hfi_enabled(void) { return intel_hfi_max_instances() > 0; }
+int intel_hfi_notifier_register(struct notifier_block *notifier,
+				unsigned int cpu);
+int intel_hfi_notifier_unregister(struct notifier_block *notifier,
+				  unsigned int cpu);
 #else
 static inline int intel_hfi_max_instances(void) { return 0; }
 static inline int intel_hfi_build_virt_features(struct hfi_features *features,
@@ -100,6 +104,10 @@ static inline int intel_hfi_build_virt_table(struct hfi_table *table,
 					     unsigned int nr_classes, unsigned int hfi_index,
 					     unsigned int cpu) { return 0; }
 static inline bool intel_hfi_enabled(void) { return false; }
+static inline int intel_hfi_notifier_register(struct notifier_block *notifier,
+					      unsigned int cpu) { return -ENODEV; }
+static inline int intel_hfi_notifier_unregister(struct notifier_block *notifier,
+						unsigned int cpu) { return -ENODEV; }
 #endif
 
 #endif /* _ASM_X86_HFI_H */
