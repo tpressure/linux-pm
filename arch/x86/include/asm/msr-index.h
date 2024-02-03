@@ -1156,5 +1156,7 @@
 						* disabling x2APIC will cause
 						* a #GP
 						*/
+#define MSR_IA32_HW_HRESET_ENABLE      0x17da
+
 
 #endif /* _ASM_X86_MSR_INDEX_H */
