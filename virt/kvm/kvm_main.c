@@ -6317,6 +6317,7 @@ static void kvm_sched_out(struct preempt_notifier *pn,
 		WRITE_ONCE(vcpu->ready, true);
 	}
 	kvm_arch_vcpu_put(vcpu);
+	kvm_arch_sched_out(vcpu);
 	__this_cpu_write(kvm_running_vcpu, NULL);
 }
 

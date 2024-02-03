@@ -2282,6 +2282,8 @@ static inline int kvm_cpu_get_apicid(int mps_cpu)
 
 int memslot_rmap_alloc(struct kvm_memory_slot *slot, unsigned long npages);
 
+static inline void kvm_arch_sched_out(struct kvm_vcpu *vcpu) {}
+
 #define KVM_CLOCK_VALID_FLAGS						\
 	(KVM_CLOCK_TSC_STABLE | KVM_CLOCK_REALTIME | KVM_CLOCK_HOST_TSC)
 
