@@ -79,6 +79,7 @@
 #include <asm/div64.h>
 #include <asm/irq_remapping.h>
 #include <asm/mshyperv.h>
+#include <asm/hreset.h>
 #include <asm/hypervisor.h>
 #include <asm/tlbflush.h>
 #include <asm/intel_pt.h>
@@ -12494,7 +12495,14 @@ void kvm_arch_sched_in(struct kvm_vcpu *vcpu, int cpu)
 		pmu->need_cleanup = true;
 		kvm_make_request(KVM_REQ_PMU, vcpu);
 	}
+
+	reset_hardware_history();
 	static_call(kvm_x86_sched_in)(vcpu, cpu);
+}
+
+void kvm_arch_sched_out(struct kvm_vcpu *vcpu)
+{
+	reset_hardware_history();
 }
 
 void kvm_arch_free_vm(struct kvm *kvm)
