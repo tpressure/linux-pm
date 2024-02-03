@@ -71,6 +71,11 @@ struct pt_desc {
 	struct pt_ctx guest;
 };
 
+struct vcpu_hfi_desc {
+	u64 host_thread_cfg;
+	u64 guest_thread_cfg;
+};
+
 union vmx_exit_reason {
 	struct {
 		u32	basic			: 16;
@@ -286,6 +291,7 @@ struct vcpu_vmx {
 	u64		      msr_ia32_therm_control;
 	u64		      msr_ia32_therm_interrupt;
 	u64		      msr_ia32_therm_status;
+	struct vcpu_hfi_desc  vcpu_hfi_desc;
 
 	/*
 	 * loaded_vmcs points to the VMCS currently used in this vcpu. For a
@@ -366,7 +372,7 @@ struct vcpu_vmx {
 	int hfi_table_idx;
 
 	/* Save desired MSR intercept (read: pass-through) state */
-#define MAX_POSSIBLE_PASSTHROUGH_MSRS	16
+#define MAX_POSSIBLE_PASSTHROUGH_MSRS	18
 	struct {
 		DECLARE_BITMAP(read, MAX_POSSIBLE_PASSTHROUGH_MSRS);
 		DECLARE_BITMAP(write, MAX_POSSIBLE_PASSTHROUGH_MSRS);

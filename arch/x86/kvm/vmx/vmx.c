@@ -225,6 +225,8 @@ static u32 vmx_possible_passthrough_msrs[MAX_POSSIBLE_PASSTHROUGH_MSRS] = {
 	MSR_CORE_C3_RESIDENCY,
 	MSR_CORE_C6_RESIDENCY,
 	MSR_CORE_C7_RESIDENCY,
+	MSR_IA32_HW_FEEDBACK_THREAD_CONFIG,
+	MSR_IA32_HW_FEEDBACK_CHAR,
 };
 
 /*
@@ -1286,6 +1288,30 @@ static void pt_guest_exit(struct vcpu_vmx *vmx)
 	 */
 	if (vmx->pt_desc.host.ctl)
 		wrmsrl(MSR_IA32_RTIT_CTL, vmx->pt_desc.host.ctl);
+}
+
+static void itd_guest_enter(struct vcpu_vmx *vmx)
+{
+	struct vcpu_hfi_desc *vcpu_hfi = &vmx->vcpu_hfi_desc;
+
+	if (!guest_cpuid_has(&vmx->vcpu, X86_FEATURE_ITD) ||
+	    !kvm_cpu_cap_has(X86_FEATURE_ITD))
+		return;
+
+	rdmsrl(MSR_IA32_HW_FEEDBACK_THREAD_CONFIG, vcpu_hfi->host_thread_cfg);
+	wrmsrl(MSR_IA32_HW_FEEDBACK_THREAD_CONFIG, vcpu_hfi->guest_thread_cfg);
+}
+
+static void itd_guest_exit(struct vcpu_vmx *vmx)
+{
+	struct vcpu_hfi_desc *vcpu_hfi = &vmx->vcpu_hfi_desc;
+
+	if (!guest_cpuid_has(&vmx->vcpu, X86_FEATURE_ITD) ||
+	    !kvm_cpu_cap_has(X86_FEATURE_ITD))
+		return;
+
+	rdmsrl(MSR_IA32_HW_FEEDBACK_THREAD_CONFIG, vcpu_hfi->guest_thread_cfg);
+	wrmsrl(MSR_IA32_HW_FEEDBACK_THREAD_CONFIG, vcpu_hfi->host_thread_cfg);
 }
 
 void vmx_set_host_fs_gs(struct vmcs_host_state *host, u16 fs_sel, u16 gs_sel,
@@ -5485,6 +5511,8 @@ static void vmx_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 	vmx->msr_ia32_therm_control = 0;
 	vmx->msr_ia32_therm_interrupt = 0;
 	vmx->msr_ia32_therm_status = 0;
+	vmx->vcpu_hfi_desc.host_thread_cfg = 0;
+	vmx->vcpu_hfi_desc.guest_thread_cfg = 0;
 
 	vmx->hv_deadline_tsc = -1;
 	kvm_set_cr8(vcpu, 0);
@@ -7977,6 +8005,7 @@ static fastpath_t vmx_vcpu_run(struct kvm_vcpu *vcpu)
 	kvm_load_guest_xsave_state(vcpu);
 
 	pt_guest_enter(vmx);
+	itd_guest_enter(vmx);
 
 	atomic_switch_perf_msrs(vmx);
 	if (intel_pmu_lbr_is_enabled(vcpu))
@@ -8015,6 +8044,7 @@ static fastpath_t vmx_vcpu_run(struct kvm_vcpu *vcpu)
 	loadsegment(es, __USER_DS);
 #endif
 
+	itd_guest_exit(vmx);
 	pt_guest_exit(vmx);
 
 	kvm_load_host_xsave_state(vcpu);
@@ -8473,6 +8503,13 @@ static void vmx_vcpu_after_set_cpuid(struct kvm_vcpu *vcpu)
 
 		if (best)
 			vmx->hfi_table_idx = ((union cpuid6_edx)best->edx).split.index;
+	}
+
+	if (guest_cpuid_has(vcpu, X86_FEATURE_ITD) && kvm_cpu_cap_has(X86_FEATURE_ITD)) {
+		vmx_set_intercept_for_msr(vcpu, MSR_IA32_HW_FEEDBACK_THREAD_CONFIG,
+					  MSR_TYPE_RW, !guest_cpuid_has(vcpu, X86_FEATURE_ITD));
+		vmx_set_intercept_for_msr(vcpu, MSR_IA32_HW_FEEDBACK_CHAR,
+					  MSR_TYPE_RW, !guest_cpuid_has(vcpu, X86_FEATURE_ITD));
 	}
 
 	/* Refresh #PF interception to account for MAXPHYADDR changes. */
