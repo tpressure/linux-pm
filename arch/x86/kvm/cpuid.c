@@ -197,6 +197,16 @@ static int kvm_check_hfi_cpuid(struct kvm_vcpu *vcpu,
 	if (data_size > hfi_features.nr_table_pages << PAGE_SHIFT)
 		return -EINVAL;
 
+	/*
+	 * Check HRESET leaf since Guest's control of MSR_IA32_HW_HRESET_ENABLE
+	 * needs to take effect on hardware.
+	 */
+	best = cpuid_entry2_find(entries, nent, 0x20, 0);
+
+	/* Cannot set the Guest bit that is unsopported by Host. */
+	if (best && best->ebx & ~cpuid_ebx(0x20))
+		return -EINVAL;
+
 	return 0;
 }
 
@@ -784,6 +794,10 @@ void kvm_set_cpu_caps(void)
 		F(AMX_FP16) | F(AVX_IFMA) | F(LAM)
 	);
 
+	/* Currently HRESET is used to reset the ITD related history. */
+	if (kvm_cpu_cap_has(X86_FEATURE_ITD))
+		kvm_cpu_cap_set(X86_FEATURE_HRESET);
+
 	kvm_cpu_cap_init_kvm_defined(CPUID_7_1_EDX,
 		F(AVX_VNNI_INT8) | F(AVX_NE_CONVERT) | F(PREFETCHITI) |
 		F(AMX_COMPLEX)
@@ -1030,7 +1044,7 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 	switch (function) {
 	case 0:
 		/* Limited to the highest leaf implemented in KVM. */
-		entry->eax = min(entry->eax, 0x1fU);
+		entry->eax = min(entry->eax, 0x20U);
 		break;
 	case 1:
 		cpuid_entry_override(entry, CPUID_1_EDX);
@@ -1297,6 +1311,16 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 	case 0x1e: /* TMUL information */
 		if (!kvm_cpu_cap_has(X86_FEATURE_AMX_TILE)) {
 			entry->eax = entry->ebx = entry->ecx = entry->edx = 0;
+			break;
+		}
+		break;
+	/* Intel HRESET */
+	case 0x20:
+		if (!kvm_cpu_cap_has(X86_FEATURE_HRESET)) {
+			entry->eax = 0;
+			entry->ebx = 0;
+			entry->ecx = 0;
+			entry->edx = 0;
 			break;
 		}
 		break;
