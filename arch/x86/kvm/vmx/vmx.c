@@ -8386,7 +8386,9 @@ static void vmx_hardware_unsetup(void)
 static void vmx_vm_destroy(struct kvm *kvm)
 {
 	struct kvm_vmx *kvm_vmx = to_kvm_vmx(kvm);
+	struct hfi_desc *kvm_vmx_hfi = &kvm_vmx->pkg_therm.hfi_desc;
 
+	kfree(kvm_vmx_hfi->hfi_table.base_addr);
 	free_pages((unsigned long)kvm_vmx->pid_table, vmx_get_pid_table_order(kvm));
 }
 
