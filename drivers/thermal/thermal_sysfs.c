@@ -184,12 +184,6 @@ trip_point_hyst_store(struct device *dev, struct device_attribute *attr,
 	}
 
 	if (hyst != trip->hysteresis) {
-		if (tz->ops->set_trip_hyst) {
-			ret = tz->ops->set_trip_hyst(tz, trip_id, hyst);
-			if (ret)
-				goto unlock;
-		}
-
 		trip->hysteresis = hyst;
 
 		thermal_zone_trip_updated(tz, trip);
