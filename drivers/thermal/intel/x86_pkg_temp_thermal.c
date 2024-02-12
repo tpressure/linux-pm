@@ -302,6 +302,7 @@ static struct thermal_trip *pkg_temp_thermal_trips_init(int cpu, int tj_max, int
 			tj_max - thres_reg_value * 1000 : THERMAL_TEMP_INVALID;
 
 		trips[i].type = THERMAL_TRIP_PASSIVE;
+		trips[i].flags |= THERMAL_TRIP_FLAG_RW_TEMP;
 
 		pr_debug("%s: cpu=%d, trip=%d, temp=%d\n",
 			 __func__, cpu, i, trips[i].temperature);
@@ -345,8 +346,7 @@ static int pkg_temp_thermal_device_add(unsigned int cpu)
 	INIT_DELAYED_WORK(&zonedev->work, pkg_temp_thermal_threshold_work_fn);
 	zonedev->cpu = cpu;
 	zonedev->tzone = thermal_zone_device_register_with_trips("x86_pkg_temp",
-			zonedev->trips, thres_count,
-			(thres_count == MAX_NUMBER_OF_TRIPS) ? 0x03 : 0x01,
+			zonedev->trips, thres_count, 0,
 			zonedev, &tzone_ops, &pkg_temp_tz_params, 0, 0);
 	if (IS_ERR(zonedev->tzone)) {
 		err = PTR_ERR(zonedev->tzone);
