@@ -122,6 +122,11 @@ trip_point_temp_store(struct device *dev, struct device_attribute *attr,
 
 	trip = &tz->trips[trip_id];
 
+	if (!(trip->flags & THERMAL_TRIP_FLAG_RW_TEMP)) {
+		ret = -EPERM;
+		goto unlock;
+	}
+
 	if (temp != trip->temperature) {
 		if (tz->ops->set_trip_temp) {
 			ret = tz->ops->set_trip_temp(tz, trip_id, temp);
@@ -172,6 +177,11 @@ trip_point_hyst_store(struct device *dev, struct device_attribute *attr,
 	mutex_lock(&tz->lock);
 
 	trip = &tz->trips[trip_id];
+
+	if (!(trip->flags & THERMAL_TRIP_FLAG_RW_HYST)) {
+		ret = -EPERM;
+		goto unlock;
+	}
 
 	if (hyst != trip->hysteresis) {
 		if (tz->ops->set_trip_hyst) {
@@ -392,17 +402,16 @@ static const struct attribute_group *thermal_zone_attribute_groups[] = {
 /**
  * create_trip_attrs() - create attributes for trip points
  * @tz:		the thermal zone device
- * @mask:	Writeable trip point bitmap.
  *
  * helper function to instantiate sysfs entries for every trip
  * point and its properties of a struct thermal_zone_device.
  *
  * Return: 0 on success, the proper error value otherwise.
  */
-static int create_trip_attrs(struct thermal_zone_device *tz, int mask)
+static int create_trip_attrs(struct thermal_zone_device *tz)
 {
+	const struct thermal_trip *trip;
 	struct attribute **attrs;
-	int indx;
 
 	/* This function works only for zones with at least one trip */
 	if (tz->num_trips <= 0)
@@ -437,7 +446,9 @@ static int create_trip_attrs(struct thermal_zone_device *tz, int mask)
 		return -ENOMEM;
 	}
 
-	for (indx = 0; indx < tz->num_trips; indx++) {
+	for_each_trip(tz, trip) {
+		int indx = thermal_zone_trip_id(tz, trip);
+
 		/* create trip type attribute */
 		snprintf(tz->trip_type_attrs[indx].name, THERMAL_NAME_LENGTH,
 			 "trip_point_%d_type", indx);
@@ -458,7 +469,7 @@ static int create_trip_attrs(struct thermal_zone_device *tz, int mask)
 						tz->trip_temp_attrs[indx].name;
 		tz->trip_temp_attrs[indx].attr.attr.mode = S_IRUGO;
 		tz->trip_temp_attrs[indx].attr.show = trip_point_temp_show;
-		if (mask & (1 << indx)) {
+		if (trip->flags & THERMAL_TRIP_FLAG_RW_TEMP) {
 			tz->trip_temp_attrs[indx].attr.attr.mode |= S_IWUSR;
 			tz->trip_temp_attrs[indx].attr.store =
 							trip_point_temp_store;
@@ -473,7 +484,7 @@ static int create_trip_attrs(struct thermal_zone_device *tz, int mask)
 					tz->trip_hyst_attrs[indx].name;
 		tz->trip_hyst_attrs[indx].attr.attr.mode = S_IRUGO;
 		tz->trip_hyst_attrs[indx].attr.show = trip_point_hyst_show;
-		if (tz->ops->set_trip_hyst) {
+		if (trip->flags & THERMAL_TRIP_FLAG_RW_HYST) {
 			tz->trip_hyst_attrs[indx].attr.attr.mode |= S_IWUSR;
 			tz->trip_hyst_attrs[indx].attr.store =
 					trip_point_hyst_store;
@@ -505,8 +516,7 @@ static void destroy_trip_attrs(struct thermal_zone_device *tz)
 	kfree(tz->trips_attribute_group.attrs);
 }
 
-int thermal_zone_create_device_groups(struct thermal_zone_device *tz,
-				      int mask)
+int thermal_zone_create_device_groups(struct thermal_zone_device *tz)
 {
 	const struct attribute_group **groups;
 	int i, size, result;
@@ -522,7 +532,7 @@ int thermal_zone_create_device_groups(struct thermal_zone_device *tz,
 		groups[i] = thermal_zone_attribute_groups[i];
 
 	if (tz->num_trips) {
-		result = create_trip_attrs(tz, mask);
+		result = create_trip_attrs(tz);
 		if (result) {
 			kfree(groups);
 
