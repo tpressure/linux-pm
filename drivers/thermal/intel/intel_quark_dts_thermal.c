@@ -101,7 +101,6 @@ struct soc_sensor_entry {
 	u32 store_ptps;
 	u32 store_dts_enable;
 	struct thermal_zone_device *tzone;
-	struct thermal_trip trips[QRK_MAX_DTS_TRIPS];
 };
 
 static struct soc_sensor_entry *soc_dts;
@@ -316,8 +315,8 @@ static void free_soc_dts(struct soc_sensor_entry *aux_entry)
 
 static struct soc_sensor_entry *alloc_soc_dts(void)
 {
+	struct thermal_trip trips[QRK_MAX_DTS_TRIPS];
 	struct soc_sensor_entry *aux_entry;
-	struct thermal_trip *trips;
 	int err;
 	u32 out;
 
@@ -326,7 +325,6 @@ static struct soc_sensor_entry *alloc_soc_dts(void)
 		err = -ENOMEM;
 		return ERR_PTR(-ENOMEM);
 	}
-	trips = aux_entry->trips;
 
 	/* Check if DTS register is locked */
 	err = iosf_mbi_read(QRK_MBI_UNIT_RMU, MBI_REG_READ,
